@@ -27,6 +27,7 @@ jobs:
       - build-a12-kernel
       - build-a13-kernel
       - build-a14-kernel
+      - build-a15-kernel
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -47,10 +48,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            manager/*.apk
+            Manager/*.apk
             android*-lkm/*_kernelsu.ko
             AnyKernel3-*.zip
             boot-images-*/Image-*/*.img.gz
-            ksud_magic-*
-            ksud_overlayfs-*
-            susfsd-*
+            ksud_magic/ksud_magic-*
+            ksud_overlayfs/ksud_overlayfs-*
+            susfsd/susfsd-*

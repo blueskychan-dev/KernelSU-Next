@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.Collator
 import java.util.Locale
+import com.rifsxd.ksunext.ksuApp
 import com.rifsxd.ksunext.ui.util.HanziToPinyin
 import com.rifsxd.ksunext.ui.util.listModules
 import com.rifsxd.ksunext.ui.util.overlayFsAvailable
@@ -135,6 +136,10 @@ class ModuleViewModel : ViewModel() {
         }
     }
 
+    private fun sanitizeVersionString(version: String): String {
+        return version.replace(Regex("[^a-zA-Z0-9.\\-_]"), "_")
+    }
+
     fun checkUpdate(m: ModuleInfo): Triple<String, String, String> {
         val empty = Triple("", "", "")
         if (m.updateJson.isEmpty() || m.remove || m.update || !m.enabled) {
@@ -144,11 +149,8 @@ class ModuleViewModel : ViewModel() {
         val result = kotlin.runCatching {
             val url = m.updateJson
             Log.i(TAG, "checkUpdate url: $url")
-            val response = okhttp3.OkHttpClient()
-                .newCall(
-                    okhttp3.Request.Builder()
-                        .url(url)
-                        .build()
+            val response = ksuApp.okhttpClient.newCall(
+                    okhttp3.Request.Builder().url(url).build()
                 ).execute()
             Log.d(TAG, "checkUpdate code: ${response.code}")
             if (response.isSuccessful) {
@@ -167,7 +169,8 @@ class ModuleViewModel : ViewModel() {
             JSONObject(result)
         }.getOrNull() ?: return empty
 
-        val version = updateJson.optString("version", "")
+        var version = updateJson.optString("version", "")
+        version = sanitizeVersionString(version)
         val versionCode = updateJson.optInt("versionCode", 0)
         val zipUrl = updateJson.optString("zipUrl", "")
         val changelog = updateJson.optString("changelog", "")

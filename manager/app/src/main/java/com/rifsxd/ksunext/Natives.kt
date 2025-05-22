@@ -21,6 +21,13 @@ object Natives {
     // 11640: Support query working mode, LKM or GKI
     // when MINIMAL_SUPPORTED_KERNEL > 11640, we can remove this constant.
     const val MINIMAL_SUPPORTED_KERNEL_LKM = 11648
+
+    // 12404: Support disable sucompat mode
+    const val MINIMAL_SUPPORTED_SU_COMPAT = 12404
+
+    // 12569: support get hook mode
+    const val MINIMAL_SUPPORTED_HOOK_MODE = 12569
+
     const val KERNEL_SU_DOMAIN = "u:r:su:s0"
 
     const val ROOT_UID = 0
@@ -48,12 +55,31 @@ object Natives {
     external fun uidShouldUmount(uid: Int): Boolean
 
     /**
+     * Get a string indicating the SU hook mode enabled in kernel.
+     * The return values are:
+     * - "Manual": Manual hooks was enabled.
+     * - "Kprobes": Kprobes hooks was enabled (CONFIG_KSU_KPROBES_HOOK).
+     *
+     * @return return hook mode, or null if unavailable.
+     */
+    external fun getHookMode(): String?
+
+    /**
      * Get the profile of the given package.
      * @param key usually the package name
      * @return return null if failed.
      */
     external fun getAppProfile(key: String?, uid: Int): Profile
     external fun setAppProfile(profile: Profile?): Boolean
+
+    /**
+     * `su` compat mode can be disabled temporarily.
+     *  0: disabled
+     *  1: enabled
+     *  negative : error
+     */
+    external fun isSuEnabled(): Boolean
+    external fun setSuEnabled(enabled: Boolean): Boolean
 
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999

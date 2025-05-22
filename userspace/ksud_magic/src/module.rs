@@ -6,7 +6,7 @@ use crate::{
     sepolicy,
 };
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use const_format::concatcp;
 use is_executable::is_executable;
 use java_properties::PropertiesIter;
@@ -16,7 +16,7 @@ use std::fs::{copy, rename};
 use std::{
     collections::HashMap,
     env::var as env_var,
-    fs::{remove_dir_all, remove_file, set_permissions, File, Permissions},
+    fs::{File, Permissions, remove_dir_all, remove_file, set_permissions},
     io::Cursor,
     path::{Path, PathBuf},
     process::Command,
@@ -491,6 +491,12 @@ fn _list_modules(path: &str) -> Vec<HashMap<String, String>> {
     }
 
     modules
+}
+
+pub fn mount_system() -> Result<()> {
+    println!("Current mount system: {}", defs::MOUNT_SYSTEM);
+
+    Ok(())
 }
 
 pub fn list_modules() -> Result<()> {

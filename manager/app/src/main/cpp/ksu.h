@@ -11,6 +11,8 @@ bool become_manager(const char *);
 
 int get_version();
 
+const char* get_hook_mode();
+
 bool get_allow_list(int *uids, int *size);
 
 bool uid_should_umount(int uid);
@@ -78,5 +80,9 @@ struct app_profile {
 bool set_app_profile(const app_profile *profile);
 
 bool get_app_profile(p_key_t key, app_profile *profile);
+
+bool set_su_enabled(bool enabled);
+
+bool is_su_enabled();
 
 #endif //KERNELSU_KSU_H

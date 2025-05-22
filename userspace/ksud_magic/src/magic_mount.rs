@@ -4,20 +4,20 @@ use crate::defs::{
 use crate::magic_mount::NodeFileType::{Directory, RegularFile, Symlink, Whiteout};
 use crate::restorecon::{lgetfilecon, lsetfilecon};
 use crate::utils::ensure_dir_exists;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use extattr::lgetxattr;
 use rustix::fs::{
-    bind_mount, chmod, chown, mount, move_mount, unmount, Gid, MetadataExt, Mode, MountFlags,
-    MountPropagationFlags, Uid, UnmountFlags,
+    Gid, MetadataExt, Mode, MountFlags, MountPropagationFlags, Uid, UnmountFlags, bind_mount,
+    chmod, chown, mount, move_mount, unmount,
 };
 use rustix::mount::mount_change;
 use rustix::path::Arg;
 use std::cmp::PartialEq;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fs;
-use std::fs::{create_dir, create_dir_all, read_dir, read_link, DirEntry, FileType};
-use std::os::unix::fs::{symlink, FileTypeExt};
+use std::fs::{DirEntry, FileType, create_dir, create_dir_all, read_dir, read_link};
+use std::os::unix::fs::{FileTypeExt, symlink};
 use std::path::{Path, PathBuf};
 
 const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
@@ -283,7 +283,7 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                         Symlink => true,
                         Whiteout => real_path.exists(),
                         _ => {
-                            if let Ok(metadata) = real_path.metadata() {
+                            if let Ok(metadata) = real_path.symlink_metadata() {
                                 let file_type = NodeFileType::from_file_type(metadata.file_type())
                                     .unwrap_or(Whiteout);
                                 file_type != node.file_type || file_type == Symlink

@@ -5,7 +5,7 @@
     <string name="issue_report_body_2">โปรดรายงานมันให้เร็วที่สุด!</string>
     <string name="issue_report_github">รายงานบน Github</string>
     <string name="issue_report_telegram">ติดต่อผ่านทาง Telegram</string>
-    <string name="issue_report_github_link">https://github.com/rifsxd/KernelSU-Next/issues</string>
+    <string name="issue_report_github_link">https://github.com/KernelSU-Next/KernelSU-Next/issues</string>
     <string name="issue_report_telegram_link">https://t.me/ksunext</string>
     <string name="confirm">ยืนยัน</string>
     <string name="app_name" translatable="false">KernelSU Next</string>
@@ -65,7 +65,7 @@
     <string name="safe_mode">โหมดปลอดภัย</string>
     <string name="reboot_to_apply">รีบูตเพื่อให้มีผล</string>
     <string name="module_magisk_conflict">โมดูลไม่สามารถใช้งานได้ เนื่องจากขัดแย้งกับ Magisk!</string>
-    <string name="home_module_mount">โมดูลระบบ</string>
+    <string name="home_mount_system">โมดูลระบบ</string>
     <string name="home_magic_mount">Magic Mount</string>
     <string name="home_overlayfs_mount">OverlayFS</string>
     <string name="unavailable">ไม่สามารถใช้งานได้</string>
@@ -83,7 +83,7 @@
     <string name="cancel">ยกเลิก</string>
     <string name="later">ภายหลัง</string>
     <string name="home_next_kernelsu">🔥 Next build</string>
-    <string name="home_next_kernelsu_repo">https://github.com/rifsxd/KernelSU-Next</string>
+    <string name="home_next_kernelsu_repo">https://github.com/KernelSU-Next/KernelSU-Next</string>
     <string name="home_next_kernelsu_body">Branch ทดลอง Next ดูได้ที่ GitHub!</string>
     <string name="home_experimental_kernelsu">⚠️ คำเตือนสิ่งนี้อยู่ภายใต้การพัฒนา!</string>
     <string name="home_experimental_kernelsu_repo">127.0.0.1</string>
@@ -106,11 +106,11 @@
     <string name="profile_selinux_context">บริบท SELinux</string>
     <string name="profile_umount_modules">Umount โมดูล</string>
     <string name="failed_to_update_app_profile">ไม่สามารถอัปเดตโปรไฟล์แอปสำหรับ %s ได้</string>
-    <string name="require_kernel_version">KernelSU Next เวอร์ชัน %d ต่ำเกินไป ทำให้ตัวจัดการไม่สามารถทำงานได้อย่างถูกต้อง โปรดอัปเกรดเป็นเวอร์ชัน %d หรือสูงกว่า!</string>
+    <string name="require_kernel_version">KernelSU Next เวอร์ชัน %1$d ต่ำเกินไป ทำให้ตัวจัดการไม่สามารถทำงานได้อย่างถูกต้อง โปรดอัปเกรดเป็นเวอร์ชัน %2$d หรือสูงกว่า!</string>
     <string name="settings_umount_modules_default">Umount โมดูลตามค่าเริ่มต้น</string>
     <string name="settings_umount_modules_default_summary">หากเปิดใช้งานค่าเริ่มต้นโดยทั่วไปสำหรับ \"Umount โมดูล\" ในโปรไฟล์แอป จะเป็นการลบการแก้ไขโมดูลทั้งหมดในระบบสำหรับแอปพลิเคชันที่ไม่มีการตั้งค่าโปรไฟล์</string>
-    <string name="settings_susfs_toggle">ซ่อน kprobe hooks</string>
-    <string name="settings_susfs_toggle_summary">จะปิดใช้งาน kprobe hooks ที่สร้างโดย ksu และเปิดใช้งาน non-kprobe hooks ที่ฝังไว้แทน โดยใช้ฟังก์ชันการทำงานเดียวกันกับที่ใช้กับเคอร์เนลที่ไม่ใช่ GKI ซึ่งไม่รองรับ</string>
+    <string name="settings_susfs_toggle">ซ่อน kprobes hook</string>
+    <string name="settings_susfs_toggle_summary">จะปิดใช้งาน kprobes hook ที่สร้างโดย ksu และเปิดใช้งาน non-kprobes hook ที่ฝังไว้แทน โดยใช้ฟังก์ชันการทำงานเดียวกันกับที่ใช้กับเคอร์เนลที่ไม่ใช่ GKI ซึ่งไม่รองรับ</string>
     <string name="profile_umount_modules_summary">การเปิดใช้งานตัวเลือกนี้จะทำให้ KernelSU Next สามารถกู้คืนไฟล์ที่แก้ไขโดยโมดูลสำหรับแอปนี้ได้</string>
     <string name="profile_selinux_domain">โดเมน</string>
     <string name="profile_selinux_rules">กฎ</string>

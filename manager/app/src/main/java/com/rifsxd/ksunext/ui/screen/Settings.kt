@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.dergoogler.mmrl.platform.Platform
 import com.maxkeppeker.sheets.core.models.base.Header
 import com.maxkeppeker.sheets.core.models.base.IconSource
 import com.maxkeppeker.sheets.core.models.base.rememberUseCaseState
@@ -63,6 +64,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.AppProfileTemplateScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.BackupRestoreScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import kotlinx.coroutines.Dispatchers
@@ -113,8 +115,6 @@ fun SettingScreen(navigator: DestinationsNavigator) {
         }
         val loadingDialog = rememberLoadingDialog()
         val shrinkDialog = rememberConfirmDialog()
-        val restoreDialog = rememberConfirmDialog()
-        val backupDialog = rememberConfirmDialog()
 
         Column(
             modifier = Modifier
@@ -159,13 +159,33 @@ fun SettingScreen(navigator: DestinationsNavigator) {
             }
             if (ksuVersion != null) {
                 SwitchItem(
-                    icon = Icons.Filled.RemoveModerator,
+                    icon = Icons.Filled.FolderDelete,
                     title = stringResource(id = R.string.settings_umount_modules_default),
                     summary = stringResource(id = R.string.settings_umount_modules_default_summary),
                     checked = umountChecked
+
                 ) {
                     if (Natives.setDefaultUmountModules(it)) {
                         umountChecked = it
+                    }
+                }
+            }
+
+            if (ksuVersion != null) {
+                if (Natives.version >= Natives.MINIMAL_SUPPORTED_SU_COMPAT) {
+                    var isSuDisabled by rememberSaveable {
+                        mutableStateOf(!Natives.isSuEnabled())
+                    }
+                    SwitchItem(
+                        icon = Icons.Filled.RemoveModerator,
+                        title = stringResource(id = R.string.settings_disable_su),
+                        summary = stringResource(id = R.string.settings_disable_su_summary),
+                        checked = isSuDisabled
+                    ) { checked ->
+                        val shouldEnable = !checked
+                        if (Natives.setSuEnabled(shouldEnable)) {
+                            isSuDisabled = !shouldEnable
+                        }
                     }
                 }
             }
@@ -201,60 +221,33 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                 }
             }
 
-            val hasShownWarning = rememberSaveable { mutableStateOf(prefs.getBoolean("has_shown_warning", false)) }
-
             var useOverlayFs by rememberSaveable {
                 mutableStateOf(
                     prefs.getBoolean("use_overlay_fs", false)
                 )
             }
 
-            val isManager = Natives.becomeManager(ksuApp.packageName)
-
             var showRebootDialog by remember { mutableStateOf(false) }
 
-            var showWarningDialog by remember { mutableStateOf(false) }
+            val isOverlayAvailable = overlayFsAvailable()
 
-            if (ksuVersion != null) {
+            if (ksuVersion != null && isOverlayAvailable) {
                 SwitchItem(
                     icon = Icons.Filled.Build,
                     title = stringResource(id = R.string.use_overlay_fs),
                     summary = stringResource(id = R.string.use_overlay_fs_summary),
                     checked = useOverlayFs
                 ) {
-                    if (!hasShownWarning.value) {
-                        showWarningDialog = true
+                    prefs.edit().putBoolean("use_overlay_fs", it).apply()
+                    useOverlayFs = it
+                    if (useOverlayFs) {
+                        moduleBackup()
+                    } else {
+                        moduleMigration()
                     }
+                    if (isManager) install()
+                    showRebootDialog = true
                 }
-            }
-
-            if (showWarningDialog) {
-                AlertDialog(
-                    onDismissRequest = { showWarningDialog = false },
-                    title = { Text(stringResource(R.string.warning)) },
-                    text = { Text(stringResource(R.string.warning_message)) },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            showWarningDialog = false
-                            prefs.edit().putBoolean("use_overlay_fs", !useOverlayFs).apply()
-                            useOverlayFs = !useOverlayFs
-                            if (useOverlayFs) {
-                                moduleBackup()
-                            } else {
-                                moduleMigration()
-                            }
-                            if (isManager) install()
-                            showRebootDialog = true
-                        }) {
-                            Text(stringResource(R.string.proceed))
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showWarningDialog = false }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
-                )
             }
 
             if (showRebootDialog) {
@@ -281,7 +274,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
 
             var checkUpdate by rememberSaveable {
                 mutableStateOf(
-                    prefs.getBoolean("check_update", true)
+                    prefs.getBoolean("check_update", false)
                 )
             }
             SwitchItem(
@@ -299,15 +292,119 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                     prefs.getBoolean("enable_web_debugging", false)
                 )
             }
-            SwitchItem(
-                icon = Icons.Filled.DeveloperMode,
-                title = stringResource(id = R.string.enable_web_debugging),
-                summary = stringResource(id = R.string.enable_web_debugging_summary),
-                checked = enableWebDebugging
-            ) {
-                prefs.edit().putBoolean("enable_web_debugging", it).apply()
-                enableWebDebugging = it
+
+            if (ksuVersion != null) {
+                SwitchItem(
+                    icon = Icons.Filled.Web,
+                    title = stringResource(id = R.string.enable_web_debugging),
+                    summary = stringResource(id = R.string.enable_web_debugging_summary),
+                    checked = enableWebDebugging
+                ) {
+                    prefs.edit().putBoolean("enable_web_debugging", it).apply()
+                    enableWebDebugging = it
+                }
             }
+
+            var developerOptionsEnabled by rememberSaveable {
+                mutableStateOf(
+                    prefs.getBoolean("enable_developer_options", false)
+                )
+            }
+            if (ksuVersion != null) {
+                SwitchItem(
+                    icon = Icons.Filled.DeveloperMode,
+                    title = stringResource(id = R.string.enable_developer_options),
+                    summary = stringResource(id = R.string.enable_developer_options_summary),
+                    checked = developerOptionsEnabled
+                ) {
+                    prefs.edit().putBoolean("enable_developer_options", it).apply()
+                    developerOptionsEnabled = it
+                }
+            }
+
+            var useWebUIX by rememberSaveable {
+                mutableStateOf(
+                    prefs.getBoolean("use_webuix", true)
+                )
+            }
+            if (ksuVersion != null) {
+                SwitchItem(
+                    beta = false,
+                    enabled = Platform.isAlive,
+                    icon = Icons.Filled.WebAsset,
+                    title = stringResource(id = R.string.use_webuix),
+                    summary = stringResource(id = R.string.use_webuix_summary),
+                    checked = useWebUIX
+                ) {
+                    prefs.edit().putBoolean("use_webuix", it).apply()
+                    useWebUIX = it
+                }
+            }
+            var useWebUIXEruda by rememberSaveable {
+                mutableStateOf(
+                    prefs.getBoolean("use_webuix_eruda", false)
+                )
+            }
+            if (ksuVersion != null) {
+                SwitchItem(
+                    beta = false,
+                    enabled = Platform.isAlive && useWebUIX && enableWebDebugging,
+                    icon = Icons.Filled.FormatListNumbered,
+                    title = stringResource(id = R.string.use_webuix_eruda),
+                    summary = stringResource(id = R.string.use_webuix_eruda_summary),
+                    checked = useWebUIXEruda
+                ) {
+                    prefs.edit().putBoolean("use_webuix_eruda", it).apply()
+                    useWebUIXEruda = it
+                }
+            }
+
+            if (isOverlayAvailable && useOverlayFs) {
+                val shrink = stringResource(id = R.string.shrink_sparse_image)
+                val shrinkMessage = stringResource(id = R.string.shrink_sparse_image_message)
+                ListItem(
+                    leadingContent = {
+                        Icon(
+                            Icons.Filled.Compress,
+                            shrink
+                        )
+                    },
+                    headlineContent = { Text(shrink) },
+                    modifier = Modifier.clickable {
+                        scope.launch {
+                            val result = shrinkDialog.awaitConfirm(title = shrink, content = shrinkMessage)
+                            if (result == ConfirmResult.Confirmed) {
+                                loadingDialog.withLoading {
+                                    shrinkModules()
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+
+            if (ksuVersion != null) {
+                val backupRestore = stringResource(id = R.string.backup_restore)
+                ListItem(
+                    leadingContent = {
+                        Icon(
+                            Icons.Filled.Backup,
+                            backupRestore
+                        )
+                    },
+                    headlineContent = { Text(backupRestore) },
+                    modifier = Modifier.clickable {
+                        navigator.navigate(BackupRestoreScreenDestination)
+                    }
+                )
+            }
+
+            // val lkmMode = Natives.version >= Natives.MINIMAL_SUPPORTED_KERNEL_LKM && Natives.isLkmMode
+            // if (lkmMode) {
+            //     UninstallItem(navigator) {
+            //         loadingDialog.withLoading(it)
+            //     }
+            // } // DISBAND LKM MODE
 
             var showBottomsheet by remember { mutableStateOf(false) }
 
@@ -340,7 +437,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                                         .clickable {
                                             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
                                             val current = LocalDateTime.now().format(formatter)
-                                            exportBugreportLauncher.launch("KernelSU_bugreport_${current}.tar.gz")
+                                            exportBugreportLauncher.launch("KernelSU_Next_bugreport_${current}.tar.gz")
                                             showBottomsheet = false
                                         }
                                 ) {
@@ -418,87 +515,6 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                 )
             }
 
-            if (ksuVersion != null) {
-                val moduleBackup = stringResource(id = R.string.module_backup)
-                val backupMessage = stringResource(id = R.string.module_backup_message)
-                ListItem(
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Backup,
-                            moduleBackup
-                        )
-                    },
-                    headlineContent = { Text(moduleBackup) },
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            val result = backupDialog.awaitConfirm(title = moduleBackup, content = backupMessage)
-                            if (result == ConfirmResult.Confirmed) {
-                                loadingDialog.withLoading {
-                                    moduleBackup()
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-
-            if (ksuVersion != null) {
-                val moduleRestore = stringResource(id = R.string.module_restore)
-                val restoreMessage = stringResource(id = R.string.module_restore_message)
-                ListItem(
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Restore,
-                            moduleRestore
-                        )
-                    },
-                    headlineContent = { Text(moduleRestore) },
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            val result = restoreDialog.awaitConfirm(title = moduleRestore, content = restoreMessage)
-                            if (result == ConfirmResult.Confirmed) {
-                                loadingDialog.withLoading {
-                                    moduleRestore()
-                                    showRebootDialog = true
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-
-            if (useOverlayFs) {
-                val shrink = stringResource(id = R.string.shrink_sparse_image)
-                val shrinkMessage = stringResource(id = R.string.shrink_sparse_image_message)
-                ListItem(
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Compress,
-                            shrink
-                        )
-                    },
-                    headlineContent = { Text(shrink) },
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            val result = shrinkDialog.awaitConfirm(title = shrink, content = shrinkMessage)
-                            if (result == ConfirmResult.Confirmed) {
-                                loadingDialog.withLoading {
-                                    shrinkModules()
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-
-
-            val lkmMode = Natives.version >= Natives.MINIMAL_SUPPORTED_KERNEL_LKM && Natives.isLkmMode
-            if (lkmMode) {
-                UninstallItem(navigator) {
-                    loadingDialog.withLoading(it)
-                }
-            }
-
             val about = stringResource(id = R.string.about)
             ListItem(
                 leadingContent = {
@@ -516,112 +532,112 @@ fun SettingScreen(navigator: DestinationsNavigator) {
     }
 }
 
-@Composable
-fun UninstallItem(
-    navigator: DestinationsNavigator,
-    withLoading: suspend (suspend () -> Unit) -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val uninstallConfirmDialog = rememberConfirmDialog()
-    val showTodo = {
-        Toast.makeText(context, "TODO", Toast.LENGTH_SHORT).show()
-    }
-    val uninstallDialog = rememberUninstallDialog { uninstallType ->
-        scope.launch {
-            val result = uninstallConfirmDialog.awaitConfirm(
-                title = context.getString(uninstallType.title),
-                content = context.getString(uninstallType.message)
-            )
-            if (result == ConfirmResult.Confirmed) {
-                withLoading {
-                    when (uninstallType) {
-                        UninstallType.TEMPORARY -> showTodo()
-                        UninstallType.PERMANENT -> navigator.navigate(
-                            FlashScreenDestination(FlashIt.FlashUninstall)
-                        )
-                        UninstallType.RESTORE_STOCK_IMAGE -> navigator.navigate(
-                            FlashScreenDestination(FlashIt.FlashRestore)
-                        )
-                        UninstallType.NONE -> Unit
-                    }
-                }
-            }
-        }
-    }
-    val uninstall = stringResource(id = R.string.settings_uninstall)
-    ListItem(
-        leadingContent = {
-            Icon(
-                Icons.Filled.Delete,
-                uninstall
-            )
-        },
-        headlineContent = { Text(uninstall) },
-        modifier = Modifier.clickable {
-            uninstallDialog.show()
-        }
-    )
-}
+// @Composable
+// fun UninstallItem(
+//     navigator: DestinationsNavigator,
+//     withLoading: suspend (suspend () -> Unit) -> Unit,
+// ) {
+//     val context = LocalContext.current
+//     val scope = rememberCoroutineScope()
+//     val uninstallConfirmDialog = rememberConfirmDialog()
+//     val showTodo = {
+//         Toast.makeText(context, "TODO", Toast.LENGTH_SHORT).show()
+//     }
+//     val uninstallDialog = rememberUninstallDialog { uninstallType ->
+//         scope.launch {
+//             val result = uninstallConfirmDialog.awaitConfirm(
+//                 title = context.getString(uninstallType.title),
+//                 content = context.getString(uninstallType.message)
+//             )
+//             if (result == ConfirmResult.Confirmed) {
+//                 withLoading {
+//                     when (uninstallType) {
+//                         UninstallType.TEMPORARY -> showTodo()
+//                         UninstallType.PERMANENT -> navigator.navigate(
+//                             FlashScreenDestination(FlashIt.FlashUninstall)
+//                         )
+//                         UninstallType.RESTORE_STOCK_IMAGE -> navigator.navigate(
+//                             FlashScreenDestination(FlashIt.FlashRestore)
+//                         )
+//                         UninstallType.NONE -> Unit
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     val uninstall = stringResource(id = R.string.settings_uninstall)
+//     ListItem(
+//         leadingContent = {
+//             Icon(
+//                 Icons.Filled.Delete,
+//                 uninstall
+//             )
+//         },
+//         headlineContent = { Text(uninstall) },
+//         modifier = Modifier.clickable {
+//             uninstallDialog.show()
+//         }
+//     )
+// }
 
-enum class UninstallType(val title: Int, val message: Int, val icon: ImageVector) {
-    TEMPORARY(
-        R.string.settings_uninstall_temporary,
-        R.string.settings_uninstall_temporary_message,
-        Icons.Filled.Delete
-    ),
-    PERMANENT(
-        R.string.settings_uninstall_permanent,
-        R.string.settings_uninstall_permanent_message,
-        Icons.Filled.DeleteForever
-    ),
-    RESTORE_STOCK_IMAGE(
-        R.string.settings_restore_stock_image,
-        R.string.settings_restore_stock_image_message,
-        Icons.AutoMirrored.Filled.Undo
-    ),
-    NONE(0, 0, Icons.Filled.Delete)
-}
+// enum class UninstallType(val title: Int, val message: Int, val icon: ImageVector) {
+//     TEMPORARY(
+//         R.string.settings_uninstall_temporary,
+//         R.string.settings_uninstall_temporary_message,
+//         Icons.Filled.Delete
+//     ),
+//     PERMANENT(
+//         R.string.settings_uninstall_permanent,
+//         R.string.settings_uninstall_permanent_message,
+//         Icons.Filled.DeleteForever
+//     ),
+//     RESTORE_STOCK_IMAGE(
+//         R.string.settings_restore_stock_image,
+//         R.string.settings_restore_stock_image_message,
+//         Icons.AutoMirrored.Filled.Undo
+//     ),
+//     NONE(0, 0, Icons.Filled.Delete)
+// }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun rememberUninstallDialog(onSelected: (UninstallType) -> Unit): DialogHandle {
-    return rememberCustomDialog { dismiss ->
-        val options = listOf(
-            // UninstallType.TEMPORARY,
-            UninstallType.PERMANENT,
-            UninstallType.RESTORE_STOCK_IMAGE
-        )
-        val listOptions = options.map {
-            ListOption(
-                titleText = stringResource(it.title),
-                subtitleText = if (it.message != 0) stringResource(it.message) else null,
-                icon = IconSource(it.icon)
-            )
-        }
+// @OptIn(ExperimentalMaterial3Api::class)
+// @Composable
+// fun rememberUninstallDialog(onSelected: (UninstallType) -> Unit): DialogHandle {
+//     return rememberCustomDialog { dismiss ->
+//         val options = listOf(
+//             // UninstallType.TEMPORARY,
+//             UninstallType.PERMANENT,
+//             UninstallType.RESTORE_STOCK_IMAGE
+//         )
+//         val listOptions = options.map {
+//             ListOption(
+//                 titleText = stringResource(it.title),
+//                 subtitleText = if (it.message != 0) stringResource(it.message) else null,
+//                 icon = IconSource(it.icon)
+//             )
+//         }
 
-        var selection = UninstallType.NONE
-        ListDialog(state = rememberUseCaseState(visible = true, onFinishedRequest = {
-            if (selection != UninstallType.NONE) {
-                onSelected(selection)
-            }
-        }, onCloseRequest = {
-            dismiss()
-        }), header = Header.Default(
-            title = stringResource(R.string.settings_uninstall),
-        ), selection = ListSelection.Single(
-            showRadioButtons = false,
-            options = listOptions,
-        ) { index, _ ->
-            selection = options[index]
-        })
-    }
-}
+//         var selection = UninstallType.NONE
+//         ListDialog(state = rememberUseCaseState(visible = true, onFinishedRequest = {
+//             if (selection != UninstallType.NONE) {
+//                 onSelected(selection)
+//             }
+//         }, onCloseRequest = {
+//             dismiss()
+//         }), header = Header.Default(
+//             title = stringResource(R.string.settings_uninstall),
+//         ), selection = ListSelection.Single(
+//             showRadioButtons = false,
+//             options = listOptions,
+//         ) { index, _ ->
+//             selection = options[index]
+//         })
+//     }
+// } // DISBAND LKM MODE
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(
-    scrollBehavior: TopAppBarScrollBehavior? = null
+    scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
     TopAppBar(
         title = { Text(stringResource(R.string.settings)) },

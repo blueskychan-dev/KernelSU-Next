@@ -33,6 +33,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,10 +45,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.dropUnlessResumed
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -59,6 +62,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import com.rifsxd.ksunext.R
 import com.rifsxd.ksunext.ui.component.KeyEventBlocker
+import com.rifsxd.ksunext.ui.util.FlashResult
 import com.rifsxd.ksunext.ui.util.LkmSelection
 import com.rifsxd.ksunext.ui.util.LocalSnackbarHost
 import com.rifsxd.ksunext.ui.util.flashModule
@@ -80,38 +84,17 @@ enum class FlashingStatus {
 // Lets you flash modules sequentially when mutiple zipUris are selected
 fun flashModulesSequentially(
     uris: List<Uri>,
-    onFinish: (Boolean, Int) -> Unit,
     onStdout: (String) -> Unit,
     onStderr: (String) -> Unit
-) {
-    val iterator = uris.iterator()
-
-    // Start processing from the first module inside a coroutine
-    CoroutineScope(Dispatchers.IO).launch {
-        // Define the recursive function within the coroutine
-        suspend fun processNext() {
-            if (iterator.hasNext()) {
-                // Flash the current module
-                flashModule(iterator.next(), onFinish = { showReboot, code ->
-                    // If successful, continue to the next one
-                    if (code == 0) {
-                        // Recursively call to process the next module
-                        launch {
-                            processNext()
-                        }
-                    } else {
-                        onFinish(showReboot, code)  // If failed, finish the process
-                    }
-                }, onStdout, onStderr)
-            } else {
-                // No more modules to process, finish the process
-                onFinish(true, 0)
+): FlashResult {
+    for (uri in uris) {
+        flashModule(uri, onStdout, onStderr).apply {
+            if (code != 0) {
+                return FlashResult(code, err, showReboot)
             }
         }
-
-        // Start the process
-        processNext()
     }
+    return FlashResult(0, "", true)
 }
 
 /**
@@ -124,7 +107,7 @@ fun flashModulesSequentially(
 fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
 
     var text by rememberSaveable { mutableStateOf("") }
-    var tempText : String
+    var tempText: String
     val logContent = rememberSaveable { StringBuilder() }
     var showFloatAction by rememberSaveable { mutableStateOf(false) }
 
@@ -136,6 +119,14 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
         mutableStateOf(FlashingStatus.FLASHING)
     }
 
+    val view = LocalView.current
+    DisposableEffect(flashing) {
+        view.keepScreenOn = flashing == FlashingStatus.FLASHING
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
+
     BackHandler(enabled = flashing == FlashingStatus.FLASHING) {
         // Disable back button if flashing is running
     }
@@ -145,16 +136,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
             return@LaunchedEffect
         }
         withContext(Dispatchers.IO) {
-            flashIt(flashIt, onFinish = { showReboot, code ->
-                if (code != 0) {
-                    text += "Error: exit code = $code.\nPlease save and check the log.\n"
-                }
-                if (showReboot) {
-                    text += "\n\n\n"
-                    showFloatAction = true
-                }
-                flashing = if (code == 0) FlashingStatus.SUCCESS else FlashingStatus.FAILED
-            }, onStdout = {
+            flashIt(flashIt, onStdout = {
                 tempText = "$it\n"
                 if (tempText.startsWith("[H[J")) { // clear command
                     text = tempText.substring(6)
@@ -164,7 +146,16 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                 logContent.append(it).append("\n")
             }, onStderr = {
                 logContent.append(it).append("\n")
-            })
+            }).apply {
+                if (code != 0) {
+                    text += "Error code: $code.\n $err Please save and check the log.\n"
+                }
+                if (showReboot) {
+                    text += "\n\n\n"
+                    showFloatAction = true
+                }
+                flashing = if (code == 0) FlashingStatus.SUCCESS else FlashingStatus.FAILED
+            }
         }
     }
 
@@ -172,7 +163,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
         topBar = {
             TopBar(
                 flashing,
-                onBack = {
+                onBack = dropUnlessResumed {
                     navigator.popBackStack()
                 },
                 onSave = {
@@ -181,7 +172,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         val date = format.format(Date())
                         val file = File(
                             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                            "KernelSU_install_log_${date}.log"
+                            "KernelSU_Next_install_log_${date}.log"
                         )
                         file.writeText(logContent.toString())
                         snackBarHost.showSnackbar("Log saved to ${file.absolutePath}")
@@ -191,8 +182,8 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
             )
         },
         floatingActionButton = {
-            if (showFloatAction) {
-                // Reboot button (bottom left)
+            if (flashIt is FlashIt.FlashModules && (flashing == FlashingStatus.SUCCESS)) {
+                // Reboot button for modules flashing
                 ExtendedFloatingActionButton(
                     onClick = {
                         scope.launch {
@@ -203,6 +194,28 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     },
                     icon = { Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.reboot)) },
                     text = { Text(text = stringResource(R.string.reboot)) }
+                )
+            }
+
+            if (flashIt is FlashIt.FlashModules && (flashing == FlashingStatus.FAILED)) {
+                // Close button for modules flashing
+                ExtendedFloatingActionButton(
+                    text = { Text(text = stringResource(R.string.close)) },
+                    icon = { Icon(Icons.Filled.Close, contentDescription = null) },
+                    onClick = {
+                        navigator.popBackStack()
+                    }
+                )
+            }
+
+            if (flashIt is FlashIt.FlashBoot && (flashing == FlashingStatus.SUCCESS || flashing == FlashingStatus.FAILED)) {
+                // Close button for LKM flashing
+                ExtendedFloatingActionButton(
+                    text = { Text(text = stringResource(R.string.close)) },
+                    icon = { Icon(Icons.Filled.Close, contentDescription = null) },
+                    onClick = {
+                        navigator.popBackStack()
+                    }
                 )
             }
         },
@@ -238,8 +251,6 @@ sealed class FlashIt : Parcelable {
     data class FlashBoot(val boot: Uri? = null, val lkm: LkmSelection, val ota: Boolean) :
         FlashIt()
 
-    data class FlashModule(val uri: Uri) : FlashIt()
-
     data class FlashModules(val uris: List<Uri>) : FlashIt()
 
     data object FlashRestore : FlashIt()
@@ -248,29 +259,26 @@ sealed class FlashIt : Parcelable {
 }
 
 fun flashIt(
-    flashIt: FlashIt, onFinish: (Boolean, Int) -> Unit,
+    flashIt: FlashIt,
     onStdout: (String) -> Unit,
     onStderr: (String) -> Unit
-) {
-    when (flashIt) {
+): FlashResult {
+    return when (flashIt) {
         is FlashIt.FlashBoot -> installBoot(
             flashIt.boot,
             flashIt.lkm,
             flashIt.ota,
-            onFinish,
             onStdout,
             onStderr
         )
 
-        is FlashIt.FlashModule -> flashModule(flashIt.uri, onFinish, onStdout, onStderr)
-
         is FlashIt.FlashModules -> {
-            flashModulesSequentially(flashIt.uris, onFinish, onStdout, onStderr)
+            flashModulesSequentially(flashIt.uris, onStdout, onStderr)
         }
 
-        FlashIt.FlashRestore -> restoreBoot(onFinish, onStdout, onStderr)
+        FlashIt.FlashRestore -> restoreBoot(onStdout, onStderr)
 
-        FlashIt.FlashUninstall -> uninstallPermanently(onFinish, onStdout, onStderr)
+        FlashIt.FlashUninstall -> uninstallPermanently(onStdout, onStderr)
     }
 }
 

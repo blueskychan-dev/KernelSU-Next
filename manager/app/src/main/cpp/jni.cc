@@ -26,6 +26,13 @@ Java_com_rifsxd_ksunext_Natives_getVersion(JNIEnv *env, jobject) {
 }
 
 extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_rifsxd_ksunext_Natives_getHookMode(JNIEnv *env, jobject) {
+    const char* mode = get_hook_mode();
+    return env->NewStringUTF(mode);
+}
+
+extern "C"
 JNIEXPORT jintArray JNICALL
 Java_com_rifsxd_ksunext_Natives_getAllowList(JNIEnv *env, jobject) {
     int uids[1024];
@@ -295,4 +302,14 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_rifsxd_ksunext_Natives_uidShouldUmount(JNIEnv *env, jobject thiz, jint uid) {
     return uid_should_umount(uid);
+}
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_rifsxd_ksunext_Natives_isSuEnabled(JNIEnv *env, jobject thiz) {
+    return is_su_enabled();
+}
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_rifsxd_ksunext_Natives_setSuEnabled(JNIEnv *env, jobject thiz, jboolean enabled) {
+    return set_su_enabled(enabled);
 }

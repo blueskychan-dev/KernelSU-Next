@@ -27,6 +27,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,9 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.dropUnlessResumed
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -65,6 +68,14 @@ fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String
     val scrollState = rememberScrollState()
     var actionResult: Boolean
     var isActionRunning by rememberSaveable { mutableStateOf(true) }
+
+    val view = LocalView.current
+    DisposableEffect(isActionRunning) {
+        view.keepScreenOn = isActionRunning
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
 
     BackHandler(enabled = isActionRunning) {
         // Disable back button if action is running
@@ -100,7 +111,7 @@ fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String
         topBar = {
             TopBar(
                 isActionRunning = isActionRunning,
-                onBack = {
+                onBack = dropUnlessResumed {
                     navigator.popBackStack()
                 },
                 onSave = {
@@ -110,7 +121,7 @@ fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String
                             val date = format.format(Date())
                             val file = File(
                                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                                "KernelSU_module_action_log_${date}.log"
+                                "KernelSU_Next_module_action_log_${date}.log"
                             )
                             file.writeText(logContent.toString())
                             snackBarHost.showSnackbar("Log saved to ${file.absolutePath}")
